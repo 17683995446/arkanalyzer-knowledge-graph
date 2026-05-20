@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arkanalyzer 知识图谱系统 - 分析详情</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main_stylesheet.css') }}">
+</head>
+<body>
+    <nav class="top_navigation">
+        <div class="navigation_brand">
+            <span class="brand_icon">&#x1F50D;</span>
+            <span class="brand_title">Arkanalyzer 知识图谱系统</span>
+        </div>
+        <div class="navigation_links">
+            <a href="/">总览</a>
+            <a href="/knowledge_graph">知识图谱</a>
+            <a href="/architecture_diagram">架构图</a>
+            <a href="/flow_diagram">流程图</a>
+            <a href="/sequence_diagram">时序图</a>
+            <a href="/analysis_detail" class="active">分析详情</a>
+        </div>
+    </nav>
+
+    <main class="detail_page_container">
+        <h2 class="page_heading">分析详情</h2>
+
+        <section class="detail_controls">
+            <div class="control_group">
+                <label>选择分析会话</label>
+                <select id="session_selector" onchange="loadSessionDetail()">
+                    <option value="">-- 请选择会话 --</option>
+                </select>
+            </div>
+            <button class="action_button" onclick="refreshSessions()">刷新会话列表</button>
+        </section>
+
+        <!-- 会话统计 -->
+        <section class="session_statistics" id="session_stats" style="display:none;">
+            <div class="stat_item">
+                <span class="stat_label">会话名称</span>
+                <span class="stat_value" id="stat_session_name">--</span>
+            </div>
+            <div class="stat_item">
+                <span class="stat_label">目标目录</span>
+                <span class="stat_value" id="stat_target_dir">--</span>
+            </div>
+            <div class="stat_item">
+                <span class="stat_label">分析状态</span>
+                <span class="stat_value" id="stat_status">--</span>
+            </div>
+            <div class="stat_item">
+                <span class="stat_label">实体数量</span>
+                <span class="stat_value" id="stat_entities">--</span>
+            </div>
+            <div class="stat_item">
+                <span class="stat_label">关系数量</span>
+                <span class="stat_value" id="stat_relations">--</span>
+            </div>
+            <div class="stat_item">
+                <span class="stat_label">开始时间</span>
+                <span class="stat_value" id="stat_started">--</span>
+            </div>
+            <div class="stat_item">
+                <span class="stat_label">完成时间</span>
+                <span class="stat_value" id="stat_completed">--</span>
+            </div>
+        </section>
+
+        <!-- 代码元素列表 -->
+        <section class="elements_section">
+            <h3 class="section_title">代码元素列表</h3>
+            <div class="elements_filter">
+                <input type="text" id="search_input" placeholder="搜索元素名称..." oninput="filterElements()">
+                <select id="kind_filter" onchange="filterElements()">
+                    <option value="all">全部类型</option>
+                    <option value="Class">类</option>
+                    <option value="Function">函数</option>
+                    <option value="Method">方法</option>
+                    <option value="Module">模块</option>
+                    <option value="Variable">变量</option>
+                </select>
+            </div>
+            <div class="elements_table_container">
+                <table class="elements_table" id="elements_table">
+                    <thead>
+                        <tr>
+                            <th>名称</th>
+                            <th>类型</th>
+                            <th>文件路径</th>
+                            <th>行号</th>
+                            <th>父元素</th>
+                            <th>文档字符串</th>
+                        </tr>
+                    </thead>
+                    <tbody id="elements_tbody">
+                        <tr><td colspan="6" class="placeholder_text">请选择分析会话查看代码元素</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 实体关系详情 -->
+        <section class="relations_section">
+            <h3 class="section_title">实体关系网络</h3>
+            <div id="detail_relation_chart" class="chart_container"></div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/analysis_detail_controller.js') }}"></script>
+</body>
+</html>

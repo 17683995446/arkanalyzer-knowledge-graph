@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arkanalyzer 知识图谱系统 - 知识图谱可视化</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main_stylesheet.css') }}">
+</head>
+<body>
+    <nav class="top_navigation">
+        <div class="navigation_brand">
+            <span class="brand_icon">&#x1F50D;</span>
+            <span class="brand_title">Arkanalyzer 知识图谱系统</span>
+        </div>
+        <div class="navigation_links">
+            <a href="/">总览</a>
+            <a href="/knowledge_graph" class="active">知识图谱</a>
+            <a href="/architecture_diagram">架构图</a>
+            <a href="/flow_diagram">流程图</a>
+            <a href="/sequence_diagram">时序图</a>
+            <a href="/analysis_detail">分析详情</a>
+        </div>
+    </nav>
+
+    <main class="graph_page_container">
+        <!-- 控制面板 -->
+        <aside class="graph_control_panel">
+            <h3>图谱控制</h3>
+            <div class="control_group">
+                <label>布局算法</label>
+                <select id="layout_selector" onchange="changeLayout()">
+                    <option value="force">力导向布局</option>
+                    <option value="circular">环形布局</option>
+                    <option value="radial">辐射布局</option>
+                </select>
+            </div>
+            <div class="control_group">
+                <label>节点过滤</label>
+                <select id="type_filter" onchange="filterByType()">
+                    <option value="all">全部类型</option>
+                </select>
+            </div>
+            <div class="control_group">
+                <label>关系过滤</label>
+                <select id="relation_filter" onchange="filterByRelation()">
+                    <option value="all">全部关系</option>
+                </select>
+            </div>
+            <div class="control_group">
+                <label>显示标签</label>
+                <input type="checkbox" id="show_labels" checked onchange="toggleLabels()">
+            </div>
+            <div class="control_group">
+                <button class="action_button primary" onclick="refreshGraph()">刷新图谱</button>
+            </div>
+
+            <div class="graph_legend">
+                <h4>图例</h4>
+                <div id="legend_items" class="legend_container"></div>
+            </div>
+
+            <div class="node_detail_panel" id="node_detail">
+                <h4>节点详情</h4>
+                <div id="node_info" class="node_info_content">
+                    <p class="placeholder_text">点击节点查看详情</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 图谱画布 -->
+        <div class="graph_canvas_area">
+            <div id="knowledge_graph_chart" class="full_size_chart"></div>
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/knowledge_graph_controller.js') }}"></script>
+</body>
+</html>

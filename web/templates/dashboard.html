@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arkanalyzer 知识图谱系统 - 总览仪表盘</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main_stylesheet.css') }}">
+</head>
+<body>
+    <nav class="top_navigation">
+        <div class="navigation_brand">
+            <span class="brand_icon">&#x1F50D;</span>
+            <span class="brand_title">Arkanalyzer 知识图谱系统</span>
+        </div>
+        <div class="navigation_links">
+            <a href="/" class="active">总览</a>
+            <a href="/knowledge_graph">知识图谱</a>
+            <a href="/architecture_diagram">架构图</a>
+            <a href="/flow_diagram">流程图</a>
+            <a href="/sequence_diagram">时序图</a>
+            <a href="/analysis_detail">分析详情</a>
+        </div>
+        <div class="navigation_status">
+            <span id="connection_status" class="status_indicator online">在线</span>
+            <span id="last_update_time">--</span>
+        </div>
+    </nav>
+
+    <main class="dashboard_container">
+        <!-- 系统概览卡片 -->
+        <section class="summary_cards">
+            <div class="summary_card card_entities">
+                <div class="card_icon">&#x1F4C8;</div>
+                <div class="card_value" id="total_entities">0</div>
+                <div class="card_label">实体总数</div>
+            </div>
+            <div class="summary_card card_relations">
+                <div class="card_icon">&#x1F517;</div>
+                <div class="card_value" id="total_relations">0</div>
+                <div class="card_label">关系总数</div>
+            </div>
+            <div class="summary_card card_files">
+                <div class="card_icon">&#x1F4C4;</div>
+                <div class="card_value" id="total_files">0</div>
+                <div class="card_label">分析文件</div>
+            </div>
+            <div class="summary_card card_sessions">
+                <div class="card_icon">&#x1F4CB;</div>
+                <div class="card_value" id="total_sessions">0</div>
+                <div class="card_label">分析会话</div>
+            </div>
+        </section>
+
+        <!-- 图表区域 -->
+        <section class="charts_grid">
+            <div class="chart_panel">
+                <h3 class="panel_title">实体类型分布</h3>
+                <div id="entity_type_chart" class="chart_container"></div>
+            </div>
+            <div class="chart_panel">
+                <h3 class="panel_title">关系类型分布</h3>
+                <div id="relation_type_chart" class="chart_container"></div>
+            </div>
+        </section>
+
+        <!-- 系统信息与操作 -->
+        <section class="bottom_section">
+            <div class="info_panel">
+                <h3 class="panel_title">系统信息</h3>
+                <div class="info_content">
+                    <div class="info_row"><span class="info_key">技术栈</span><span class="info_value">ArkAnalyzer → SQLite</span></div>
+                    <div class="info_row"><span class="info_key">LLM提供商</span><span class="info_value">SiliconFlow (Qwen2.5-7B)</span></div>
+                    <div class="info_row"><span class="info_key">系统版本</span><span class="info_value" id="system_version">1.0.0</span></div>
+                    <div class="info_row"><span class="info_key">监听状态</span><span class="info_value" id="watcher_status">--</span></div>
+                </div>
+            </div>
+            <div class="action_panel">
+                <h3 class="panel_title">操作面板</h3>
+                <div class="action_content">
+                    <button class="action_button primary" onclick="triggerAnalysis()">重新分析</button>
+                    <button class="action_button" onclick="refreshData()">刷新数据</button>
+                    <button class="action_button" onclick="window.location.href='/knowledge_graph'">查看图谱</button>
+                </div>
+                <div class="recent_sessions">
+                    <h4>最近分析</h4>
+                    <div id="sessions_list" class="sessions_container"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/dashboard_controller.js') }}"></script>
+</body>
+</html>

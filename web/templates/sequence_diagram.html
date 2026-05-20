@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arkanalyzer 知识图谱系统 - 时序图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main_stylesheet.css') }}">
+</head>
+<body>
+    <nav class="top_navigation">
+        <div class="navigation_brand">
+            <span class="brand_icon">&#x1F50D;</span>
+            <span class="brand_title">Arkanalyzer 知识图谱系统</span>
+        </div>
+        <div class="navigation_links">
+            <a href="/">总览</a>
+            <a href="/knowledge_graph">知识图谱</a>
+            <a href="/architecture_diagram">架构图</a>
+            <a href="/flow_diagram">流程图</a>
+            <a href="/sequence_diagram" class="active">时序图</a>
+            <a href="/analysis_detail">分析详情</a>
+        </div>
+    </nav>
+
+    <main class="diagram_page_container">
+        <h2 class="page_heading">系统时序图</h2>
+        <p class="page_description">展示系统各组件间的交互时序，包括初始化、分析、更新和查询等核心场景。</p>
+
+        <div class="diagram_sections">
+            <!-- 系统初始化时序 -->
+            <section class="diagram_section">
+                <h3 class="section_title">1. 系统初始化时序</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+sequenceDiagram
+    participant User as 用户
+    participant Main as 启动脚本
+    participant Config as 系统配置
+    participant DB as 数据库模型
+    participant Builder as 图谱构建器
+    participant Watcher as 文件监听器
+    participant Flask as Web服务器
+
+    User->>Main: 启动系统
+    Main->>Config: 加载系统配置
+    Config-->>Main: 返回配置参数
+
+    Main->>DB: 初始化数据库连接
+    DB->>DB: 创建/打开SQLite文件
+    DB->>DB: 执行CREATE TABLE IF NOT EXISTS
+    DB->>DB: 创建索引
+    DB-->>Main: 数据库就绪
+
+    Main->>Builder: 初始化图谱构建器
+    Builder->>Builder: 创建代码扫描器
+    Builder-->>Main: 构建器就绪
+
+    Main->>Watcher: 启动文件监听
+    Watcher->>Watcher: 初始化文件快照
+    Watcher->>Watcher: 启动监听线程
+    Watcher-->>Main: 监听已启动
+
+    Main->>Builder: 执行初始分析
+    Builder->>Builder: 扫描项目目录
+    Builder->>DB: 存储分析结果
+    DB-->>Builder: 存储完成
+    Builder-->>Main: 初始分析完成
+
+    Main->>Flask: 启动Web服务器
+    Flask-->>User: 服务就绪 http://0.0.0.0:5000
+</pre>
+                </div>
+            </section>
+
+            <!-- 代码分析时序 -->
+            <section class="diagram_section">
+                <h3 class="section_title">2. 代码分析完整时序</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+sequenceDiagram
+    participant API as Flask API
+    participant Builder as 图谱构建器
+    participant Scanner as 代码扫描器
+    participant Analyzer as AST分析器
+    participant LLM as LLM客户端
+    participant API_SF as SiliconFlow API
+    participant DB as 数据库
+
+    API->>Builder: analyze_and_build(directory)
+    Builder->>DB: create_analysis_session()
+    DB-->>Builder: session_id
+
+    Builder->>Scanner: scan_directory(directory)
+    loop 每个源代码文件
+        Scanner->>Analyzer: analyze_file(file_path)
+        Analyzer->>Analyzer: 读取文件内容
+        Analyzer->>Analyzer: ast.parse() 解析AST
+        Analyzer->>Analyzer: 遍历AST节点
+        Analyzer-->>Scanner: CodeAnalysisResult
+    end
+    Scanner-->>Builder: 分析结果列表
+
+    Builder->>Builder: extract_all_entities()
+    Builder->>Builder: extract_all_relations()
+
+    loop 每个实体
+        Builder->>DB: find_or_create_entity()
+        DB-->>Builder: entity_id
+    end
+
+    loop 每个关系
+        Builder->>DB: insert_relation()
+        DB-->>Builder: relation_id
+    end
+
+    Builder->>Builder: select_important_files()
+
+    loop 每个重要文件 (最多5个)
+        Builder->>LLM: extract_entities_and_relations()
+        LLM->>API_SF: POST /v1/chat/completions
+        API_SF-->>LLM: JSON响应
+        LLM-->>Builder: 实体和关系列表
+
+        loop LLM发现的实体
+            Builder->>DB: find_or_create_entity()
+        end
+        loop LLM发现的关系
+            Builder->>DB: insert_relation(confidence=0.7)
+        end
+    end
+
+    Builder->>DB: update_session_status(completed)
+    Builder-->>API: 分析结果
+</pre>
+                </div>
+            </section>
+
+            <!-- 文件变化响应时序 -->
+            <section class="diagram_section">
+                <h3 class="section_title">3. 文件变化响应时序</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+sequenceDiagram
+    participant FS as 文件系统
+    participant Watcher as 文件监听器
+    participant Callback as 变更回调
+    participant Builder as 图谱构建器
+    participant DB as 数据库
+    participant Browser as 浏览器
+
+    Note over Watcher: 后台线程每2秒轮询
+
+    loop 监听循环
+        Watcher->>FS: os.walk() 扫描目录
+        FS-->>Watcher: 当前文件列表+修改时间
+        Watcher->>Watcher: 与快照对比
+        alt 检测到文件变化
+            Watcher->>Watcher: 更新文件快照
+            Watcher->>Callback: on_file_changed(changed_files)
+            Callback->>Builder: analyze_single_file(file)
+            Builder->>Builder: AST解析文件
+            Builder->>DB: 存储新实体和关系
+            DB-->>Builder: 存储完成
+            Builder-->>Callback: 分析结果
+            Callback->>Callback: 更新last_update_time
+        else 无变化
+            Watcher->>Watcher: 继续等待
+        end
+    end
+
+    Browser->>Browser: 定时轮询 /api/graph_summary
+    Browser->>Watcher: GET /api/watcher_status
+    Watcher-->>Browser: 监听状态+变更次数
+    Note over Browser: 页面自动刷新显示最新数据
+</pre>
+                </div>
+            </section>
+
+            <!-- 用户查询时序 -->
+            <section class="diagram_section">
+                <h3 class="section_title">4. 用户查询知识图谱时序</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+sequenceDiagram
+    participant Browser as 浏览器
+    participant Flask as Flask服务器
+    participant DB as SQLite数据库
+    participant ECharts as ECharts引擎
+
+    Browser->>Flask: GET /knowledge_graph
+    Flask->>Flask: render_template()
+    Flask-->>Browser: HTML页面
+
+    Browser->>Browser: 页面加载完成
+    Browser->>Flask: GET /api/graph_data
+    Flask->>DB: export_graph_data()
+    DB->>DB: SELECT * FROM graph_entities
+    DB->>DB: SELECT * FROM graph_relations
+    DB-->>Flask: 节点列表+边列表
+    Flask-->>Browser: JSON数据
+
+    Browser->>ECharts: 初始化力导向图
+    ECharts->>ECharts: 构建nodes和links
+    ECharts->>ECharts: 计算布局
+    ECharts-->>Browser: 渲染图谱
+
+    Browser->>Browser: 用户点击节点
+    Browser->>Flask: GET /api/graph_data (带过滤参数)
+    Flask->>DB: 查询关联数据
+    DB-->>Flask: 关联实体和关系
+    Flask-->>Browser: JSON响应
+    Browser->>ECharts: 高亮关联节点
+    ECharts-->>Browser: 更新图谱显示
+</pre>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            sequence: { useMaxWidth: true, wrap: true },
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

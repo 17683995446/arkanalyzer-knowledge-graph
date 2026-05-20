@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arkanalyzer 知识图谱系统 - 系统架构图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main_stylesheet.css') }}">
+</head>
+<body>
+    <nav class="top_navigation">
+        <div class="navigation_brand">
+            <span class="brand_icon">&#x1F50D;</span>
+            <span class="brand_title">Arkanalyzer 知识图谱系统</span>
+        </div>
+        <div class="navigation_links">
+            <a href="/">总览</a>
+            <a href="/knowledge_graph">知识图谱</a>
+            <a href="/architecture_diagram" class="active">架构图</a>
+            <a href="/flow_diagram">流程图</a>
+            <a href="/sequence_diagram">时序图</a>
+            <a href="/analysis_detail">分析详情</a>
+        </div>
+    </nav>
+
+    <main class="diagram_page_container">
+        <h2 class="page_heading">系统架构图</h2>
+        <p class="page_description">基于第一性原理设计的 Arkanalyzer 知识图谱系统架构，展示各模块间的依赖关系和数据流向。</p>
+
+        <div class="diagram_sections">
+            <!-- 整体架构图 -->
+            <section class="diagram_section">
+                <h3 class="section_title">1. 系统整体架构</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+graph TB
+    subgraph 用户界面层["🖥️ 用户界面层 (Web UI)"]
+        Dashboard["仪表盘<br/>Dashboard"]
+        GraphView["知识图谱视图<br/>Knowledge Graph View"]
+        ArchView["架构图视图<br/>Architecture View"]
+        FlowView["流程图视图<br/>Flow Diagram View"]
+        SeqView["时序图视图<br/>Sequence Diagram View"]
+        DetailView["分析详情视图<br/>Analysis Detail View"]
+    end
+
+    subgraph Web服务层["🌐 Web 服务层 (Flask)"]
+        WebServer["Web可视化服务器<br/>web_visualization_server.py"]
+        APIRouter["API路由控制器<br/>Routes & Endpoints"]
+        TemplateEngine["模板渲染引擎<br/>Jinja2 Templates"]
+    end
+
+    subgraph 核心分析层["⚙️ 核心分析层 (Core Engine)"]
+        CodeAnalyzer["代码分析引擎<br/>code_analysis_engine.py"]
+        GraphBuilder["知识图谱构建器<br/>knowledge_graph_builder.py"]
+        FileWatcher["文件变化监听器<br/>file_change_watcher.py"]
+    end
+
+    subgraph 智能推理层["🤖 智能推理层 (LLM)"]
+        LLMClient["硅基流动LLM客户端<br/>siliconflow_language_model.py"]
+        SiliconFlowAPI["SiliconFlow API<br/>Qwen/Qwen2.5-7B-Instruct"]
+    end
+
+    subgraph 数据持久层["💾 数据持久层 (SQLite)"]
+        Database["知识图谱数据库<br/>knowledge_graph_database.py"]
+        EntityTable["实体表<br/>graph_entities"]
+        RelationTable["关系表<br/>graph_relations"]
+        SessionTable["会话表<br/>analysis_sessions"]
+        CodeTable["代码元素表<br/>code_elements"]
+    end
+
+    subgraph 配置层["📋 配置层"]
+        SystemConfig["系统配置<br/>system_configuration.py"]
+    end
+
+    Dashboard --> WebServer
+    GraphView --> WebServer
+    ArchView --> WebServer
+    FlowView --> WebServer
+    SeqView --> WebServer
+    DetailView --> WebServer
+
+    WebServer --> APIRouter
+    WebServer --> TemplateEngine
+    APIRouter --> GraphBuilder
+    APIRouter --> Database
+
+    GraphBuilder --> CodeAnalyzer
+    GraphBuilder --> LLMClient
+    GraphBuilder --> Database
+
+    CodeAnalyzer --> FileWatcher
+    LLMClient --> SiliconFlowAPI
+
+    Database --> EntityTable
+    Database --> RelationTable
+    Database --> SessionTable
+    Database --> CodeTable
+
+    WebServer --> SystemConfig
+    CodeAnalyzer --> SystemConfig
+    LLMClient --> SystemConfig
+    Database --> SystemConfig
+</pre>
+                </div>
+            </section>
+
+            <!-- 数据流架构 -->
+            <section class="diagram_section">
+                <h3 class="section_title">2. 数据流架构</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+flowchart LR
+    subgraph 输入["📥 数据输入"]
+        SourceCode["源代码文件<br/>.py / .js / .ts / .java"]
+        UserRequest["用户请求<br/>HTTP API"]
+        FileChange["文件变化事件<br/>Watcher"]
+    end
+
+    subgraph 处理["⚙️ 数据处理"]
+        ASTParser["AST解析器<br/>Python ast模块"]
+        PatternMatch["模式匹配器<br/>类/函数/导入提取"]
+        LLMInference["LLM推理<br/>实体关系抽取"]
+        GraphConstructor["图谱构造器<br/>三元组生成"]
+    end
+
+    subgraph 存储["💾 数据存储"]
+        SQLiteDB[("SQLite数据库<br/>knowledge_graph.db")]
+    end
+
+    subgraph 输出["📤 数据输出"]
+        JSONResponse["JSON API响应"]
+        EChartsViz["ECharts可视化<br/>力导向图/饼图"]
+        MermaidViz["Mermaid图表<br/>架构/流程/时序"]
+    end
+
+    SourceCode --> ASTParser
+    SourceCode --> LLMInference
+    FileChange --> ASTParser
+    UserRequest --> GraphConstructor
+
+    ASTParser --> PatternMatch
+    PatternMatch --> GraphConstructor
+    LLMInference --> GraphConstructor
+    GraphConstructor --> SQLiteDB
+
+    SQLiteDB --> JSONResponse
+    SQLiteDB --> EChartsViz
+    SQLiteDB --> MermaidViz
+</pre>
+                </div>
+            </section>
+
+            <!-- 模块依赖关系 -->
+            <section class="diagram_section">
+                <h3 class="section_title">3. 模块依赖关系</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+graph TD
+    SystemConfig["system_configuration.py<br/>系统配置"] --> CodeAnalyzer["code_analysis_engine.py<br/>代码分析引擎"]
+    SystemConfig --> LLMClient["siliconflow_language_model.py<br/>LLM客户端"]
+    SystemConfig --> Database["knowledge_graph_database.py<br/>数据库模型"]
+    SystemConfig --> FileWatcher["file_change_watcher.py<br/>文件监听器"]
+    SystemConfig --> WebServer["web_visualization_server.py<br/>Web服务器"]
+
+    Database --> GraphBuilder["knowledge_graph_builder.py<br/>图谱构建器"]
+    LLMClient --> GraphBuilder
+    CodeAnalyzer --> GraphBuilder
+    FileWatcher --> WebServer
+    GraphBuilder --> WebServer
+    Database --> WebServer
+</pre>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arkanalyzer 知识图谱系统 - 流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main_stylesheet.css') }}">
+</head>
+<body>
+    <nav class="top_navigation">
+        <div class="navigation_brand">
+            <span class="brand_icon">&#x1F50D;</span>
+            <span class="brand_title">Arkanalyzer 知识图谱系统</span>
+        </div>
+        <div class="navigation_links">
+            <a href="/">总览</a>
+            <a href="/knowledge_graph">知识图谱</a>
+            <a href="/architecture_diagram">架构图</a>
+            <a href="/flow_diagram" class="active">流程图</a>
+            <a href="/sequence_diagram">时序图</a>
+            <a href="/analysis_detail">分析详情</a>
+        </div>
+    </nav>
+
+    <main class="diagram_page_container">
+        <h2 class="page_heading">系统流程图</h2>
+        <p class="page_description">展示系统各核心流程的执行步骤和决策逻辑。</p>
+
+        <div class="diagram_sections">
+            <!-- 主分析流程 -->
+            <section class="diagram_section">
+                <h3 class="section_title">1. 代码分析与知识图谱构建主流程</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+flowchart TD
+    Start([开始分析]) --> InputDir[输入目标目录路径]
+    InputDir --> ValidatePath{路径是否存在?}
+    ValidatePath -- 否 --> ErrorExit([返回错误信息])
+    ValidatePath -- 是 --> CreateSession[创建分析会话<br/>记录到analysis_sessions表]
+
+    CreateSession --> ScanDir[扫描目录中的源代码文件<br/>排除__pycache__/.git等]
+    ScanDir --> HasFiles{发现源文件?}
+    HasFiles -- 否 --> MarkEmpty[标记会话为空<br/>更新状态为completed]
+    HasFiles -- 是 --> LoopFiles[遍历每个源代码文件]
+
+    LoopFiles --> ReadFile[读取文件内容]
+    ReadFile --> ParseAST[AST语法解析<br/>Python ast模块]
+    ParseAST --> ExtractStatic[静态提取实体和关系<br/>类/函数/导入/调用/继承]
+    ExtractStatic --> StoreElements[存储代码元素到<br/>code_elements表]
+    StoreElements --> StoreEntities[存储/更新实体到<br/>graph_entities表]
+    StoreEntities --> StoreRelations[存储关系到<br/>graph_relations表]
+
+    StoreRelations --> MoreFiles{还有更多文件?}
+    MoreFiles -- 是 --> LoopFiles
+    MoreFiles -- 否 --> SelectImportant[选择重要文件<br/>按类/函数数量评分]
+
+    SelectImportant --> LLMCheck{启用LLM分析?}
+    LLMCheck -- 否 --> UpdateSummary
+    LLMCheck -- 是 --> LLMExtract[调用SiliconFlow API<br/>Qwen/Qwen2.5-7B-Instruct]
+    LLMExtract --> ParseLLMResponse[解析LLM JSON响应]
+    ParseLLMResponse --> MergeEntities[合并LLM发现的实体<br/>置信度0.7]
+    MergeEntities --> MergeRelations[合并LLM发现的关系]
+    MergeRelations --> MoreImportant{还有重要文件?}
+    MoreImportant -- 是 --> SelectImportant
+    MoreImportant -- 否 --> UpdateSummary
+
+    UpdateSummary[更新图谱摘要统计] --> MarkComplete[标记会话为completed]
+    MarkComplete --> ReturnResult([返回分析结果<br/>实体数/关系数/文件数])
+</pre>
+                </div>
+            </section>
+
+            <!-- 文件监听流程 -->
+            <section class="diagram_section">
+                <h3 class="section_title">2. 文件变化监听与增量更新流程</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+flowchart TD
+    WatchStart([启动文件监听]) --> InitSnapshot[初始化文件快照<br/>记录所有文件修改时间]
+    InitSnapshot --> Sleep[等待监听间隔<br/>默认2秒]
+    Sleep --> ScanCurrent[扫描当前目录文件]
+    ScanCurrent --> CompareSnapshot[与上次快照对比]
+
+    CompareSnapshot --> DetectNew{发现新增文件?}
+    DetectNew -- 是 --> AddToChanges[加入变更列表]
+    DetectNew -- 否 --> DetectModified
+
+    DetectModified{发现修改文件?}
+    DetectModified -- 是 --> AddModified[加入变更列表]
+    DetectModified -- 否 --> DetectDeleted
+
+    DetectDeleted{发现删除文件?}
+    DetectDeleted -- 是 --> LogDeletion[记录删除日志]
+    DetectDeleted -- 否 --> CheckAnyChanges
+
+    AddToChanges --> CheckAnyChanges
+    AddModified --> CheckAnyChanges
+    LogDeletion --> CheckAnyChanges
+
+    CheckAnyChanges{有变更文件?}
+    CheckAnyChanges -- 否 --> UpdateSnapshot[更新快照]
+    CheckAnyChanges -- 是 --> TriggerCallback[触发变更回调]
+
+    TriggerCallback --> LimitFiles[限制处理文件数<br/>最多3个/次]
+    LimitFiles --> AnalyzeFile[对每个变更文件<br/>执行单文件分析]
+    AnalyzeFile --> UpdateGraph[增量更新知识图谱]
+    UpdateGraph --> UpdateTimestamp[更新最后修改时间戳]
+    UpdateTimestamp --> UpdateSnapshot
+
+    UpdateSnapshot --> StillRunning{监听器运行中?}
+    StillRunning -- 是 --> Sleep
+    StillRunning -- 否 --> WatchStop([监听停止])
+</pre>
+                </div>
+            </section>
+
+            <!-- Web请求处理流程 -->
+            <section class="diagram_section">
+                <h3 class="section_title">3. Web请求处理流程</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+flowchart TD
+    Request([用户HTTP请求]) --> RouteMatch[Flask路由匹配]
+    RouteMatch --> PageRoute{页面路由?}
+
+    PageRoute -- 是 --> RenderTemplate[渲染Jinja2模板]
+    RenderTemplate --> ReturnHTML([返回HTML页面])
+
+    PageRoute -- 否 --> APIRoute{API路由?}
+    APIRoute -- 否 --> NotFound([返回404])
+
+    APIRoute -- 是 --> APIType{API类型判断}
+
+    APIType -- 图谱摘要 --> QuerySummary[查询图谱统计]
+    QueryType -- 图谱数据 --> QueryGraph[查询完整图谱数据]
+    APIType -- 实体统计 --> QueryEntityStats[查询实体类型统计]
+    APIType -- 关系统计 --> QueryRelationStats[查询关系类型统计]
+    APIType -- 触发分析 --> TriggerAnalysis
+
+    QuerySummary --> QueryDatabase[执行SQLite查询]
+    QueryGraph --> QueryDatabase
+    QueryEntityStats --> QueryDatabase
+    QueryRelationStats --> QueryDatabase
+
+    QueryDatabase --> FormatJSON[格式化为JSON]
+    FormatJSON --> ReturnJSON([返回JSON响应])
+
+    TriggerAnalysis --> ValidateInput[验证输入参数]
+    ValidateInput --> RunBuilder[执行知识图谱构建器]
+    RunBuilder --> ReturnAnalysisResult([返回分析结果JSON])
+</pre>
+                </div>
+            </section>
+
+            <!-- LLM调用流程 -->
+            <section class="diagram_section">
+                <h3 class="section_title">4. LLM智能分析流程</h3>
+                <div class="mermaid_diagram">
+<pre class="mermaid">
+flowchart TD
+    LLMStart([开始LLM分析]) --> SelectFile[选择重要源文件<br/>按代码复杂度评分排序]
+    SelectFile --> ReadSource[读取源代码内容]
+    ReadSource --> CheckLength{代码长度 >= 50?}
+    CheckLength -- 否 --> SkipFile[跳过此文件]
+    CheckLength -- 是 --> BuildPrompt[构建分析提示词<br/>系统提示+用户消息]
+
+    BuildPrompt --> CallAPI[调用SiliconFlow API<br/>POST /v1/chat/completions]
+    CallAPI --> SetHeaders[设置请求头<br/>Authorization: Bearer API_KEY]
+    SetHeaders --> SetPayload[设置请求体<br/>model/messages/temperature]
+    SetPayload --> SendRequest[发送HTTP请求<br/>timeout=60s]
+
+    SendRequest --> CheckResponse{响应成功?}
+    CheckResponse -- 超时 --> HandleTimeout[返回超时错误]
+    CheckResponse -- 失败 --> HandleError[返回请求错误]
+    CheckResponse -- 成功 --> ExtractContent[提取响应文本内容]
+
+    ExtractContent --> ParseJSON{JSON解析成功?}
+    ParseJSON -- 否 --> ExtractRaw[保存原始响应]
+    ParseJSON -- 是 --> ExtractEntities[提取实体列表]
+    ExtractEntities --> ExtractRelations[提取关系列表]
+
+    ExtractRelations --> MergeToGraph[合并到知识图谱<br/>置信度=0.7]
+    MergeToGraph --> MoreFiles{还有更多文件?}
+    MoreFiles -- 是 --> SelectFile
+    MoreFiles -- 否 --> LLMComplete([LLM分析完成])
+</pre>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>
