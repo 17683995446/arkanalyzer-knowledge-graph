@@ -1,264 +1,238 @@
 """
 Arkanalyzer Knowledge Graph System - Knowledge Graph Builder
-==============================================================
-基于第一性原理：知识图谱的本质是「结构化的知识表示」，
-构建器将代码分析结果与LLM推理能力结合，生成丰富的知识图谱。
+=============================================================
+基于第一性原理：知识图谱构建的本质是「从代码到实体-关系的映射」。
+整合代码分析引擎和LLM，构建完整的知识图谱。
 """
 
 import os
 import json
 from datetime import datetime
 
+from system_configuration import logger
 from knowledge_graph_database import KnowledgeGraphDatabase
-from siliconflow_language_model import SiliconFlowLanguageModel
 from code_analysis_engine import ProjectCodeScanner
+from siliconflow_language_model import SiliconFlowLanguageModel
 
 
 class KnowledgeGraphBuilder:
-    """知识图谱构建器：整合代码分析与LLM推理"""
+    """知识图谱构建器"""
 
-    def __init__(self, database=None, language_model=None):
+    def __init__(self, database=None):
+        logger.info("[KnowledgeGraphBuilder] 初始化知识图谱构建器")
         self.database = database or KnowledgeGraphDatabase()
-        self.language_model = language_model or SiliconFlowLanguageModel()
-        self.code_scanner = ProjectCodeScanner()
-        self.current_session_id = None
+        self.scanner = ProjectCodeScanner()
+        self.llm_client = SiliconFlowLanguageModel()
+        logger.debug("[KnowledgeGraphBuilder] 初始化完成")
 
-    def analyze_and_build(self, target_directory, session_name=None, use_llm=True):
-        """分析目标目录并构建知识图谱"""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        session_name = session_name or f"analysis_{timestamp}"
+    def analyze_and_build(self, target_path, session_name="", use_llm=True):
+        """分析目标路径并构建知识图谱"""
+        logger.info(f"[analyze_and_build] 开始分析: path={target_path}, session={session_name}, use_llm={use_llm}")
+        
+        if not os.path.exists(target_path):
+            logger.error(f"[analyze_and_build] 路径不存在: {target_path}")
+            return {"status": "error", "message": "路径不存在"}
 
-        self.current_session_id = self.database.create_analysis_session(
-            session_name, target_directory
+        session_id = self.database.create_analysis_session(
+            session_name or f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            target_path
         )
-        self.database.update_session_status(self.current_session_id, "running")
+        logger.info(f"[analyze_and_build] 创建会话，ID={session_id}")
 
         try:
-            # 第一步：静态代码分析
-            analysis_results, scanned_files = self.code_scanner.scan_directory(target_directory)
+            logger.info(f"[analyze_and_build] 扫描目录: {target_path}")
+            analysis_results, scanned_files = self.scanner.scan_directory(target_path)
+            logger.info(f"[analyze_and_build] 扫描完成: {len(scanned_files)}个文件")
 
-            # 第二步：提取实体和关系
-            static_entities = self.code_scanner.extract_all_entities(analysis_results)
-            static_relations = self.code_scanner.extract_all_relations(analysis_results)
+            if not analysis_results:
+                logger.warning("[analyze_and_build] 未找到可分析的文件")
+                self.database.update_session_status(session_id, "completed", 0, 0)
+                return {"status": "success", "sessionId": session_id, "totalEntities": 0, "totalRelations": 0}
 
-            # 第三步：存储静态分析结果到数据库
+            logger.info("[analyze_and_build] 提取实体和关系")
+            entities = self.scanner.extract_all_entities(analysis_results)
+            relations = self.scanner.extract_all_relations(analysis_results)
+            logger.info(f"[analyze_and_build] 提取: {len(entities)}实体, {len(relations)}关系")
+
+            logger.info("[analyze_and_build] 存储代码元素")
+            for result in analysis_results:
+                self._store_code_elements(session_id, result)
+
+            logger.info("[analyze_and_build] 存储实体到数据库")
             entity_id_map = {}
-            for entity in static_entities:
+            for entity in entities:
                 entity_id = self.database.find_or_create_entity(
-                    name=entity["name"],
-                    entity_type=entity["type"],
-                    properties={
-                        "file": entity.get("file", ""),
-                        "docstring": entity.get("docstring", ""),
-                        "parentClass": entity.get("parentClass", "")
-                    },
-                    source_file=entity.get("file", ""),
-                    source_line=entity.get("line", 0)
+                    entity["name"],
+                    entity["type"],
+                    {"docstring": entity.get("docstring", "")},
+                    entity.get("file", ""),
+                    entity.get("line", 0)
                 )
-                entity_id_map[entity["name"]] = entity_id
+                entity_id_map[(entity["name"], entity["type"])] = entity_id
+                logger.debug(f"[analyze_and_build] 实体 {entity['name']} -> ID {entity_id}")
 
-                # 存储代码元素
-                self.database.insert_code_element(
-                    session_id=self.current_session_id,
-                    name=entity["name"],
-                    kind=entity["type"],
-                    file_path=entity.get("file", ""),
-                    parent=entity.get("parentClass", ""),
-                    start_line=entity.get("line", 0),
-                    end_line=entity.get("endLine", entity.get("line", 0)),
-                    docstring=entity.get("docstring", "")
-                )
+            logger.info("[analyze_and_build] 存储关系到数据库")
+            relation_count = 0
+            for relation in relations:
+                source_id = entity_id_map.get((relation["source"], "Class")) or \
+                           entity_id_map.get((relation["source"], "Function")) or \
+                           entity_id_map.get((relation["source"], "Method"))
+                target_id = entity_id_map.get((relation["target"], "Class")) or \
+                           entity_id_map.get((relation["target"], "Function")) or \
+                           entity_id_map.get((relation["target"], "Module"))
 
-            # 第四步：存储关系
-            for relation in static_relations:
-                source_id = entity_id_map.get(relation["source"])
-                target_id = entity_id_map.get(relation["target"])
                 if source_id and target_id:
                     self.database.insert_relation(
-                        source_id, target_id,
-                        relation["type"],
-                        properties={"file": relation.get("file", "")},
-                        confidence=1.0
+                        source_id, target_id, relation["type"],
+                        {"file": relation.get("file", ""), "line": relation.get("line", 0)}
                     )
+                    relation_count += 1
+                    logger.debug(f"[analyze_and_build] 关系: {relation['source']} -> {relation['target']}")
 
-            # 第五步：LLM增强分析（可选）
             if use_llm:
-                self._llm_enhanced_analysis(target_directory, analysis_results, entity_id_map)
+                logger.info("[analyze_and_build] 使用LLM增强分析")
+                important_files = self._select_important_files(analysis_results)
+                logger.info(f"[analyze_and_build] 选择{len(important_files)}个重要文件进行LLM分析")
+                for file_path in important_files[:5]:
+                    try:
+                        self._analyze_with_llm(file_path)
+                    except Exception as e:
+                        logger.error(f"[analyze_and_build] LLM分析失败 {file_path}: {e}")
 
-            # 更新会话状态
             summary = self.database.get_graph_summary()
+            logger.info(f"[analyze_and_build] 更新会话状态: {summary}")
             self.database.update_session_status(
-                self.current_session_id, "completed",
-                total_entities=summary["totalEntities"],
-                total_relations=summary["totalRelations"]
+                session_id, "completed",
+                summary["totalEntities"],
+                summary["totalRelations"]
             )
 
+            logger.info("[analyze_and_build] 分析完成")
             return {
                 "status": "success",
-                "sessionId": self.current_session_id,
-                "scannedFiles": len(scanned_files),
+                "sessionId": session_id,
                 "totalEntities": summary["totalEntities"],
-                "totalRelations": summary["totalRelations"]
+                "totalRelations": summary["totalRelations"],
+                "totalFiles": len(scanned_files)
             }
 
-        except Exception as exception:
-            self.database.update_session_status(self.current_session_id, "failed")
-            return {"status": "error", "message": str(exception)}
+        except Exception as e:
+            logger.error(f"[analyze_and_build] 分析失败: {e}", exc_info=True)
+            self.database.update_session_status(session_id, "failed")
+            return {"status": "error", "message": str(e)}
 
-    def _llm_enhanced_analysis(self, target_directory, analysis_results, entity_id_map):
-        """使用LLM增强分析"""
-        # 对关键文件进行LLM分析
-        important_files = self._select_important_files(analysis_results, max_files=5)
+    def analyze_single_file(self, file_path, use_llm=False):
+        """分析单个文件"""
+        logger.info(f"[analyze_single_file] 分析单文件: {file_path}")
+        try:
+            result = self.scanner.scan_single_file(file_path)
+            entities = self.scanner.extract_all_entities([result])
+            relations = self.scanner.extract_all_relations([result])
 
-        for result in important_files:
-            file_full_path = os.path.join(target_directory, result.file_path)
-            if not os.path.exists(file_full_path):
-                continue
+            logger.debug(f"[analyze_single_file] 提取: {len(entities)}实体, {len(relations)}关系")
 
-            try:
-                with open(file_full_path, "r", encoding="utf-8", errors="ignore") as fh:
-                    source_code = fh.read()
-
-                if len(source_code) < 50:
-                    continue
-
-                # LLM提取实体和关系
-                llm_result = self.language_model.extract_entities_and_relations(
-                    source_code, result.file_path
+            for entity in entities:
+                self.database.find_or_create_entity(
+                    entity["name"],
+                    entity["type"],
+                    {"docstring": entity.get("docstring", "")},
+                    entity.get("file", ""),
+                    entity.get("line", 0)
                 )
 
-                # 合并LLM发现的实体
-                for entity in llm_result.get("entities", []):
-                    entity_id = self.database.find_or_create_entity(
-                        name=entity["name"],
-                        entity_type=entity.get("type", "Unknown"),
-                        properties={"source": "llm", "file": result.file_path},
-                        source_file=result.file_path
-                    )
-                    entity_id_map[entity["name"]] = entity_id
+            logger.info("[analyze_single_file] 单文件分析完成")
+            return {"status": "success", "entities": len(entities), "relations": len(relations)}
+        except Exception as e:
+            logger.error(f"[analyze_single_file] 分析失败: {e}")
+            return {"status": "error", "message": str(e)}
 
-                # 合并LLM发现的关系
-                for relation in llm_result.get("relations", []):
-                    source_id = entity_id_map.get(relation["source"])
-                    target_id = entity_id_map.get(relation["target"])
-                    if source_id and target_id:
-                        self.database.insert_relation(
-                            source_id, target_id,
-                            relation.get("type", "related"),
-                            properties={"source": "llm", "file": result.file_path},
-                            confidence=0.7
-                        )
+    def _store_code_elements(self, session_id, analysis_result):
+        """存储代码元素到数据库"""
+        logger.debug(f"[_store_code_elements] 存储代码元素: session={session_id}, file={analysis_result.file_path}")
+        
+        for cls in analysis_result.classes:
+            self.database.insert_code_element(
+                session_id, cls["name"], "Class",
+                analysis_result.file_path, "",
+                cls["line"], cls["endLine"],
+                "", cls["docstring"],
+                {"bases": cls["bases"], "methods": cls["methods"]}
+            )
 
-            except Exception:
-                continue
+        for func in analysis_result.functions:
+            parent = func.get("parentClass", "")
+            kind = "Method" if parent else "Function"
+            self.database.insert_code_element(
+                session_id, func["name"], kind,
+                analysis_result.file_path, parent,
+                func["line"], func["endLine"],
+                f"({', '.join(func['arguments'])})",
+                func["docstring"],
+                {"decorators": func.get("decorators", [])}
+            )
 
-    def _select_important_files(self, analysis_results, max_files=5):
-        """选择重要的文件进行LLM分析"""
+        logger.debug(f"[_store_code_elements] 存储完成: {len(analysis_result.classes)}类, {len(analysis_result.functions)}函数")
+
+    def _select_important_files(self, analysis_results):
+        """选择重要文件进行LLM分析"""
+        logger.debug("[_select_important_files] 选择重要文件")
         scored_files = []
         for result in analysis_results:
-            score = len(result.classes) * 10 + len(result.functions) * 3 + len(result.calls)
-            scored_files.append((score, result))
+            score = len(result.classes) * 3 + len(result.functions) * 2 + len(result.imports)
+            scored_files.append((result.file_path, score))
+            logger.debug(f"[_select_important_files] {result.file_path}: score={score}")
 
-        scored_files.sort(key=lambda x: x[0], reverse=True)
-        return [item[1] for item in scored_files[:max_files]]
+        scored_files.sort(key=lambda x: x[1], reverse=True)
+        selected = [f[0] for f in scored_files[:10]]
+        logger.info(f"[_select_important_files] 选择{len(selected)}个重要文件")
+        return selected
 
-    def analyze_single_file(self, file_path, use_llm=True):
-        """分析单个文件并更新知识图谱"""
-        result = self.code_scanner.scan_single_file(file_path)
+    def _analyze_with_llm(self, file_path):
+        """使用LLM分析文件"""
+        logger.info(f"[_analyze_with_llm] LLM分析: {file_path}")
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                source_code = f.read()
+        except Exception as e:
+            logger.error(f"[_analyze_with_llm] 读取文件失败: {e}")
+            return
 
-        if not result.classes and not result.functions:
-            return {"status": "skipped", "message": "文件中没有发现代码元素"}
+        if len(source_code) < 50:
+            logger.debug(f"[_analyze_with_llm] 代码太短，跳过: {len(source_code)}字符")
+            return
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = os.path.basename(file_path)
-        self.current_session_id = self.database.create_analysis_session(
-            f"single_{file_name}_{timestamp}", os.path.dirname(file_path)
-        )
+        logger.debug(f"[_analyze_with_llm] 调用LLM API")
+        llm_result = self.llm_client.extract_entities_and_relations(source_code, file_path)
+        logger.debug(f"[_analyze_with_llm] LLM返回: {llm_result}")
 
-        entities = self.code_scanner.extract_all_entities([result])
-        relations = self.code_scanner.extract_all_relations([result])
-        entity_id_map = {}
+        if isinstance(llm_result, dict):
+            entities = llm_result.get("entities", [])
+            relations = llm_result.get("relations", [])
+            logger.info(f"[_analyze_with_llm] LLM发现: {len(entities)}实体, {len(relations)}关系")
 
-        for entity in entities:
-            entity_id = self.database.find_or_create_entity(
-                name=entity["name"],
-                entity_type=entity["type"],
-                properties={
-                    "file": entity.get("file", ""),
-                    "docstring": entity.get("docstring", ""),
-                    "parentClass": entity.get("parentClass", "")
-                },
-                source_file=entity.get("file", ""),
-                source_line=entity.get("line", 0)
-            )
-            entity_id_map[entity["name"]] = entity_id
-
-        for relation in relations:
-            source_id = entity_id_map.get(relation["source"])
-            target_id = entity_id_map.get(relation["target"])
-            if source_id and target_id:
-                self.database.insert_relation(
-                    source_id, target_id,
-                    relation["type"],
-                    properties={"file": relation.get("file", "")},
-                    confidence=1.0
+            for entity in entities:
+                self.database.find_or_create_entity(
+                    entity.get("name", "unknown"),
+                    entity.get("type", "Unknown"),
+                    entity.get("properties", {}),
+                    file_path,
+                    entity.get("line", 0)
                 )
 
-        if use_llm:
-            try:
-                with open(file_path, "r", encoding="utf-8", errors="ignore") as fh:
-                    source_code = fh.read()
-                if len(source_code) >= 50:
-                    llm_result = self.language_model.extract_entities_and_relations(
-                        source_code, file_name
+            for relation in relations:
+                source = relation.get("source", "")
+                target = relation.get("target", "")
+                rel_type = relation.get("type", "relates_to")
+                if source and target:
+                    source_id = self.database.find_or_create_entity(source, "Unknown")
+                    target_id = self.database.find_or_create_entity(target, "Unknown")
+                    self.database.insert_relation(
+                        source_id, target_id, rel_type,
+                        {"llm_enhanced": True},
+                        confidence=0.7
                     )
-                    for entity in llm_result.get("entities", []):
-                        entity_id = self.database.find_or_create_entity(
-                            name=entity["name"],
-                            entity_type=entity.get("type", "Unknown"),
-                            properties={"source": "llm", "file": file_name},
-                            source_file=file_name
-                        )
-                        entity_id_map[entity["name"]] = entity_id
-                    for relation in llm_result.get("relations", []):
-                        source_id = entity_id_map.get(relation["source"])
-                        target_id = entity_id_map.get(relation["target"])
-                        if source_id and target_id:
-                            self.database.insert_relation(
-                                source_id, target_id,
-                                relation.get("type", "related"),
-                                properties={"source": "llm", "file": file_name},
-                                confidence=0.7
-                            )
-            except Exception:
-                pass
-
-        summary = self.database.get_graph_summary()
-        self.database.update_session_status(
-            self.current_session_id, "completed",
-            total_entities=summary["totalEntities"],
-            total_relations=summary["totalRelations"]
-        )
-
-        return {
-            "status": "success",
-            "sessionId": self.current_session_id,
-            "entitiesFound": len(entities),
-            "relationsFound": len(relations)
-        }
 
     def get_visualization_data(self):
         """获取可视化数据"""
-        graph_data = self.database.export_graph_data()
-        summary = self.database.get_graph_summary()
-        entity_stats = self.database.get_entity_statistics()
-        relation_stats = self.database.get_relation_statistics()
-        recent_sessions = self.database.get_recent_sessions(10)
-
-        return {
-            "graphData": graph_data,
-            "summary": summary,
-            "entityStatistics": entity_stats,
-            "relationStatistics": relation_stats,
-            "recentSessions": recent_sessions
-        }
+        logger.info("[get_visualization_data] 获取可视化数据")
+        return self.database.export_graph_data()
