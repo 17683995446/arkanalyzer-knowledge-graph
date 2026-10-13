@@ -46,7 +46,7 @@ DATABASE_FILE_PATH = os.path.join(DATA_DIRECTORY, "knowledge_graph.db")
 # 硅基流动 LLM API 配置
 # ============================================================
 SILICONFLOW_API_ENDPOINT = "https://api.siliconflow.cn/v1/chat/completions"
-SILICONFLOW_API_KEY = "sk-uqelhavcdhfxjzjesdenxpbtqombamjniazzjtbssmdcwdvg"
+SILICONFLOW_API_KEY = "REDACTED_API_KEY"
 SILICONFLOW_DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 SILICONFLOW_MAX_TOKENS = 4096
 SILICONFLOW_TEMPERATURE = 0.3
